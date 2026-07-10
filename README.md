@@ -20,9 +20,9 @@ The application is bundled into a ready-to-use executable:
 
 1. Download the latest `DM Pro Setup 1.0.0.exe` from the **Releases** tab.
 2. Run the installer. 
-3. The DM Pro application will open. Leave it running in the background while you set up the extension!
+3. The DM Pro application will open. Keep it running in the background while you set up the extension.
 
-*(Note: If DM Pro is closed, the Chrome extension will simply stop catching downloads and allow Chrome to download them normally.)*
+If DM Pro is closed, the Chrome extension stops catching downloads and allows Chrome to download them normally.
 
 ## 🧩 2. Setting up the Chrome Extension
 
@@ -34,7 +34,7 @@ To let Chrome talk to DM Pro, load the companion extension:
 4. In the top-right corner, toggle on **Developer mode**.
 5. Click the **Load unpacked** button in the top-left corner.
 6. In the file picker, select the folder where you extracted the extension.
-7. You should now see the **DM Pro Catcher** active!
+7. You should now see the **DM Pro Catcher** active.
 
 ## ⚙️ 3. Configuring Auto-Catch
 
@@ -43,20 +43,15 @@ By default, the extension won't catch anything until you tell it which URLs to l
 1. Open your running **DM Pro** desktop app.
 2. Click on the **Settings** icon in the sidebar.
 3. Add a URL prefix (e.g., `https://speed.hetzner.de/`) and click the `+` button.
-4. **Test it out:** Try downloading a file from that prefix in Chrome. The extension will catch it, cancel the Chrome download, and instantly start it inside DM Pro!
-5. **Alternative**: You can manually click "Catch Current Download" in the extension popup when a Chrome download starts to pull it over without setting rules beforehand!
+4. Try downloading a file from that prefix in Chrome. The extension will catch it, cancel the Chrome download, and instantly start it inside DM Pro.
+5. You can manually click "Catch Current Download" in the extension popup when a Chrome download starts to pull it over without setting rules beforehand.
 
 ## 🛠️ Development Setup
 
 If you want to build DM Pro from source:
 
 ```bash
-# Install dependencies
 npm install
-
-# Run in development mode
 npm run dev
-
-# Build the executable
 npm run build:exe
 ```
