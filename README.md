@@ -28,12 +28,13 @@ The application is bundled into a ready-to-use executable:
 
 To let Chrome talk to DM Pro, load the companion extension:
 
-1. Open **Google Chrome**.
-2. Type `chrome://extensions/` into the URL bar and hit **Enter**.
-3. In the top-right corner, toggle on **Developer mode**.
-4. Click the **Load unpacked** button in the top-left corner.
-5. In the file picker, select the **`extension`** folder from the source code.
-6. You should now see the **DM Pro Catcher** active!
+1. Download **`DM_Pro_Extension_v1.0.zip`** from the **Releases** tab and extract it to a folder on your computer.
+2. Open **Google Chrome**.
+3. Type `chrome://extensions/` into the URL bar and hit **Enter**.
+4. In the top-right corner, toggle on **Developer mode**.
+5. Click the **Load unpacked** button in the top-left corner.
+6. In the file picker, select the folder where you extracted the extension.
+7. You should now see the **DM Pro Catcher** active!
 
 ## ⚙️ 3. Configuring Auto-Catch
 
