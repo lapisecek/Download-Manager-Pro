@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "DM Pro Catcher",
+  "version": "1.0",
+  "description": "Catches downloads and sends them to DM Pro desktop app.",
+  "permissions": [
+    "downloads",
+    "alarms",
+    "notifications",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*/*",
+    "<all_urls>",
+    "http://127.0.0.1:12345/*",
+    "http://127.0.0.1:12346/*",
+    "http://127.0.0.1:12347/*",
+    "http://localhost:12345/*",
+    "http://localhost:12346/*",
+    "http://localhost:12347/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}
