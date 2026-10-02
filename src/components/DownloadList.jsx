@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { Plus } from 'lucide-react';
 import DownloadItem from './DownloadItem';
+import AddDownloadModal from './AddDownloadModal';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { 
   ipcRenderer: { invoke: () => Promise.resolve([]), on: () => {}, removeListener: () => {} } 
@@ -9,6 +11,7 @@ const { ipcRenderer } = window.require ? window.require('electron') : {
 
 function DownloadList() {
   const [downloads, setDownloads] = useState([]);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
     ipcRenderer.invoke('get-downloads').then(setDownloads);
@@ -28,24 +31,35 @@ function DownloadList() {
 
   const handleDragEnd = (event) => {
     const { active, over } = event;
-    if (active.id !== over.id) {
-      const oldIndex = activeDownloads.findIndex(d => d.id === active.id);
-      const newIndex = activeDownloads.findIndex(d => d.id === over.id);
-      const newOrder = arrayMove(activeDownloads, oldIndex, newIndex);
-      
-      const newOrderedIds = newOrder.map(d => d.id);
-      ipcRenderer.invoke('reorder-downloads', newOrderedIds);
-      
-      setDownloads(prev => {
-        const others = prev.filter(d => ['completed', 'error'].includes(d.status) || d.hidden);
-        return [...newOrder, ...others];
-      });
-    }
+    if (!over || active.id === over.id) return;
+    const oldIndex = activeDownloads.findIndex(d => d.id === active.id);
+    const newIndex = activeDownloads.findIndex(d => d.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newOrder = arrayMove(activeDownloads, oldIndex, newIndex);
+    const newOrderedIds = newOrder.map(d => d.id);
+    ipcRenderer.invoke('reorder-downloads', newOrderedIds);
+    
+    setDownloads(prev => {
+      const others = prev.filter(d => ['completed', 'error'].includes(d.status) || d.hidden);
+      return [...newOrder, ...others];
+    });
   };
 
   return (
     <div className="animated">
-      <h1 className="page-title">Active Downloads</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <h1 className="page-title" style={{ margin: 0 }}>Active Downloads</h1>
+        <button 
+          type="button"
+          className="btn" 
+          onClick={() => setShowAddModal(true)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        >
+          <Plus size={16} /> Add Download
+        </button>
+      </div>
+
       {activeDownloads.length === 0 ? (
         <div style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>No active downloads.</div>
       ) : (
@@ -57,6 +71,8 @@ function DownloadList() {
           </SortableContext>
         </DndContext>
       )}
+
+      {showAddModal && <AddDownloadModal onClose={() => setShowAddModal(false)} />}
 
       {finishedDownloads.length > 0 && (
         <>

@@ -9,20 +9,24 @@ const { ipcRenderer } = window.require ? window.require('electron') : {
 };
 
 function formatBytes(bytes, decimals = 2) {
-  if (bytes === 0) return '0 Bytes';
+  if (!bytes || bytes <= 0 || isNaN(bytes)) return '0 Bytes';
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+  if (isNaN(i) || i < 0) return '0 Bytes';
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
 function formatTime(seconds) {
-  if (!seconds || seconds <= 0) return '';
-  if (seconds < 60) return `${seconds}s remaining`;
+  if (!seconds || seconds <= 0 || !isFinite(seconds)) return '';
+  if (seconds < 60) return `${Math.round(seconds)}s remaining`;
   const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}m ${secs}s remaining`;
+  const secs = Math.floor(seconds % 60);
+  if (mins < 60) return `${mins}m ${secs}s remaining`;
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return `${hrs}h ${remMins}m remaining`;
 }
 
 function DownloadItem({ download, isHistoryView }) {

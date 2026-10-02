@@ -17,7 +17,8 @@ const DEFAULT_SETTINGS = {
   autoStart: false,
   maxFullSpeedDownloads: 2,
   throttledSpeedLimit: 500,
-  autoVtScan: false
+  autoVtScan: false,
+  clipboardWatch: true
 };
 
 function Toggle({ checked, onChange, label, subtext }) {
@@ -231,6 +232,15 @@ function Settings() {
       <div className="settings-section">
         <h2 className="settings-title">Browser Extension & Clipboard Interceptor</h2>
         <p className="settings-desc">Automatically catch matching URLs from Google Chrome or your system clipboard.</p>
+
+        <div style={{ marginBottom: '16px' }}>
+          <Toggle 
+            checked={settings.clipboardWatch !== false} 
+            onChange={(val) => handleChange('clipboardWatch', val)} 
+            label="Clipboard Interceptor" 
+            subtext="Automatically detect download URLs matching prefixes copied to your clipboard."
+          />
+        </div>
 
         <div className="form-group">
           <label>Add Monitored URL Prefix</label>

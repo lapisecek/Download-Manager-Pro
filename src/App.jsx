@@ -8,11 +8,14 @@ import { Settings as SettingsIcon, LayoutDashboard, Server, History } from 'luci
 import './index.css';
 
 function formatTime(seconds) {
-  if (!seconds || seconds <= 0) return '0s';
-  if (seconds < 60) return `${seconds}s`;
+  if (!seconds || seconds <= 0 || !isFinite(seconds)) return '0s';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
   const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}m ${secs}s`;
+  const secs = Math.floor(seconds % 60);
+  if (mins < 60) return `${mins}m ${secs}s`;
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return `${hrs}h ${remMins}m`;
 }
 
 function App() {
@@ -29,7 +32,7 @@ function App() {
     return () => ipcRenderer.removeListener('downloads-updated', handleUpdate);
   }, []);
 
-  const activeDownloads = downloads.filter(d => !['completed', 'error'].includes(d.status));
+  const activeDownloads = downloads.filter(d => !['completed', 'error'].includes(d.status) && !d.hidden);
   let totalRemainingBytes = 0;
   let totalSpeed = 0;
   let globalDownloaded = 0;

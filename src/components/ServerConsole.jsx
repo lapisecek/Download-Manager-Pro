@@ -28,7 +28,7 @@ function ServerConsole() {
     }
 
     const handleLog = (event, data) => {
-      setLogs(prev => [...prev.slice(-99), data]);
+      setLogs(prev => [...prev.slice(-999), data]);
     };
     
     const handleHeartbeat = (event, time) => {
