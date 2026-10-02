@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Activity, Server } from 'lucide-react';
+import { Activity } from 'lucide-react';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { 
-  ipcRenderer: { on: () => {}, removeListener: () => {} } 
+  ipcRenderer: { invoke: () => Promise.resolve(null), on: () => {}, removeListener: () => {} } 
 };
 
 function ServerConsole() {
@@ -12,11 +12,17 @@ function ServerConsole() {
   const endRef = useRef(null);
 
   useEffect(() => {
-    // Fetch initial persistent logs
+    // Fetch initial persistent logs and active port
     if (ipcRenderer && ipcRenderer.invoke) {
       ipcRenderer.invoke('get-server-logs').then(history => {
         if (history) {
           setLogs(history);
+        }
+      }).catch(console.error);
+
+      ipcRenderer.invoke('get-server-port').then(port => {
+        if (port) {
+          setActivePort(port);
         }
       }).catch(console.error);
     }

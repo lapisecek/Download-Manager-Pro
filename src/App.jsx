@@ -4,7 +4,7 @@ import HistoryList from './components/HistoryList';
 import Settings from './components/Settings';
 import ServerConsole from './components/ServerConsole';
 import TitleBar from './components/TitleBar';
-import { DownloadCloud, Settings as SettingsIcon, LayoutDashboard, Server, History } from 'lucide-react';
+import { Settings as SettingsIcon, LayoutDashboard, Server, History } from 'lucide-react';
 import './index.css';
 
 function formatTime(seconds) {

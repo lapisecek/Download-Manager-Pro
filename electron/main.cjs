@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, clipboard, dialog } = require('electron');
 const path = require('path');
-const { startServer } = require('./server.cjs');
+const fs = require('fs');
+const { startServer, getLogHistory, getActivePort } = require('./server.cjs');
 const store = require('./store.cjs');
 
 // Initialize Defaults
@@ -18,20 +19,39 @@ const defaults = {
   throttledSpeedLimit: 500,
   autoVtScan: false
 };
+
 Object.keys(defaults).forEach(key => {
   if (store.get(key) === undefined) store.set(key, defaults[key]);
 });
 
-let mainWindow;
+let mainWindow = null;
 let tray = null;
-let clipboardInterval;
+let clipboardInterval = null;
+
+function resolveIconPath() {
+  const possiblePaths = [
+    path.join(__dirname, '../dist/icon.png'),
+    path.join(__dirname, '../build/icon.png'),
+    path.join(__dirname, '../public/icon.png'),
+    path.join(__dirname, '../icon.png')
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return path.join(__dirname, '../icon.png');
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 700,
+    width: 1040,
+    height: 720,
+    minWidth: 800,
+    minHeight: 560,
     frame: false,
     transparent: true,
+    backgroundColor: '#0f0f13',
+    show: false,
+    icon: resolveIconPath(),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -50,38 +70,61 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
+  mainWindow.once('ready-to-show', () => {
+    if (mainWindow) mainWindow.show();
+  });
+
   mainWindow.on('close', (event) => {
     if (!app.isQuiting) {
       event.preventDefault();
-      mainWindow.hide();
+      if (mainWindow) mainWindow.hide();
     }
   });
 }
 
 function createTray() {
-  tray = new Tray(path.join(__dirname, '../dist/icon.png')); 
-  const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show App', click: () => mainWindow.show() },
-    { label: 'Quit', click: () => { app.isQuiting = true; app.quit(); } }
-  ]);
-  tray.setToolTip('DM Pro');
-  tray.setContextMenu(contextMenu);
-  tray.on('click', () => mainWindow.show());
+  try {
+    const iconPath = resolveIconPath();
+    tray = new Tray(iconPath);
+    const contextMenu = Menu.buildFromTemplate([
+      { label: 'Show DM Pro', click: () => { if (mainWindow) mainWindow.show(); } },
+      { type: 'separator' },
+      { label: 'Quit', click: () => { app.isQuiting = true; app.quit(); } }
+    ]);
+    tray.setToolTip('DM Pro');
+    tray.setContextMenu(contextMenu);
+    tray.on('click', () => {
+      if (mainWindow) {
+        if (mainWindow.isVisible()) {
+          mainWindow.focus();
+        } else {
+          mainWindow.show();
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Failed to create tray icon:', err);
+  }
 }
 
 function startClipboardMonitor() {
-  let lastText = clipboard.readText();
+  let lastText = '';
+  try {
+    lastText = clipboard.readText();
+  } catch {}
+
   clipboardInterval = setInterval(() => {
-    const text = clipboard.readText();
-    if (text !== lastText) {
-      lastText = text;
-      const prefixes = store.get('urlPrefixes') || [];
-      if (prefixes.some(p => text.startsWith(p))) {
-        // Found matching URL
-        const { addDownload } = require('./downloader.cjs');
-        addDownload(text, null, {}, mainWindow);
+    try {
+      const text = clipboard.readText();
+      if (text && text !== lastText) {
+        lastText = text;
+        const prefixes = store.get('urlPrefixes') || [];
+        if (prefixes.length > 0 && prefixes.some(p => text.startsWith(p))) {
+          const { addDownload } = require('./downloader.cjs');
+          addDownload(text, null, {}, mainWindow);
+        }
       }
-    }
+    } catch {}
   }, 2000);
 }
 
@@ -91,48 +134,94 @@ app.whenReady().then(() => {
   startServer(mainWindow);
   startClipboardMonitor();
 
-  // Auto-Start
-  app.setLoginItemSettings({
-    openAtLogin: store.get('autoStart'),
-    path: app.getPath('exe')
-  });
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: !!store.get('autoStart'),
+      path: app.getPath('exe')
+    });
+  } catch {}
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    else if (mainWindow) mainWindow.show();
   });
 });
 
+app.on('before-quit', () => {
+  app.isQuiting = true;
+  if (clipboardInterval) {
+    clearInterval(clipboardInterval);
+    clipboardInterval = null;
+  }
+  store.flush();
+});
+
 // Window controls IPC
-ipcMain.handle('window-minimize', () => { if (mainWindow) mainWindow.minimize(); });
+ipcMain.handle('window-minimize', () => {
+  if (mainWindow) mainWindow.minimize();
+});
+
 ipcMain.handle('window-maximize', () => {
   if (mainWindow) {
     if (mainWindow.isMaximized()) mainWindow.unmaximize();
     else mainWindow.maximize();
   }
 });
-ipcMain.handle('window-close', () => { if (mainWindow) mainWindow.hide(); });
 
-// Settings IPC
+ipcMain.handle('window-close', () => {
+  if (mainWindow) mainWindow.hide();
+});
+
+// Settings & Dialog IPC
 ipcMain.handle('get-settings', () => store.getAll());
-ipcMain.handle('save-settings', (event, settings) => {
+
+ipcMain.handle('save-settings', (_event, settings) => {
+  if (!settings || typeof settings !== 'object') return false;
   Object.keys(settings).forEach(key => store.set(key, settings[key]));
-  
-  app.setLoginItemSettings({
-    openAtLogin: settings.autoStart,
-    path: app.getPath('exe')
-  });
+
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: !!settings.autoStart,
+      path: app.getPath('exe')
+    });
+  } catch {}
+
   return true;
 });
 
+ipcMain.handle('select-download-dir', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Default Download Directory',
+    defaultPath: store.get('downloadPath') || app.getPath('downloads'),
+    properties: ['openDirectory', 'createDirectory']
+  });
+  if (!result.canceled && result.filePaths.length > 0) {
+    return result.filePaths[0];
+  }
+  return null;
+});
+
+ipcMain.handle('get-server-logs', () => getLogHistory());
+ipcMain.handle('get-server-port', () => getActivePort());
 ipcMain.handle('get-downloads', () => store.get('downloads') || []);
 
 // Downloader actions
-const { pauseDownload, resumeDownload, cancelDownload, reorderDownloads, clearDownload, scanFileManual, deleteFileDownload } = require('./downloader.cjs');
-ipcMain.handle('pause-download', (event, id) => pauseDownload(id, mainWindow));
-ipcMain.handle('resume-download', (event, id) => resumeDownload(id, mainWindow));
-ipcMain.handle('cancel-download', (event, id) => cancelDownload(id, mainWindow));
-ipcMain.handle('open-folder', (event, folderPath) => shell.showItemInFolder(folderPath));
-ipcMain.handle('reorder-downloads', (event, orderedIds) => reorderDownloads(orderedIds, mainWindow));
-ipcMain.handle('clear-download', (event, id) => clearDownload(id, mainWindow));
-ipcMain.handle('delete-file', (event, id) => deleteFileDownload(id, mainWindow));
-ipcMain.handle('scan-file', (event, id) => scanFileManual(id, mainWindow));
+const {
+  pauseDownload,
+  resumeDownload,
+  cancelDownload,
+  reorderDownloads,
+  clearDownload,
+  scanFileManual,
+  deleteFileDownload
+} = require('./downloader.cjs');
+
+ipcMain.handle('pause-download', (_event, id) => pauseDownload(id, mainWindow));
+ipcMain.handle('resume-download', (_event, id) => resumeDownload(id, mainWindow));
+ipcMain.handle('cancel-download', (_event, id) => cancelDownload(id, mainWindow));
+ipcMain.handle('open-folder', (_event, folderPath) => shell.showItemInFolder(folderPath));
+ipcMain.handle('reorder-downloads', (_event, orderedIds) => reorderDownloads(orderedIds, mainWindow));
+ipcMain.handle('clear-download', (_event, id) => clearDownload(id, mainWindow));
+ipcMain.handle('delete-file', (_event, id) => deleteFileDownload(id, mainWindow));
+ipcMain.handle('scan-file', (_event, id) => scanFileManual(id, mainWindow));

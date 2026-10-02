@@ -8,6 +8,12 @@ function getLogHistory() {
   return logHistory;
 }
 
+let currentBoundPort = null;
+
+function getActivePort() {
+  return currentBoundPort;
+}
+
 function startServer(mainWindow) {
   const app = express();
   app.use(cors({
@@ -98,6 +104,7 @@ function startServer(mainWindow) {
     }
     const currentPort = PORTS[portIndex];
     const server = app.listen(currentPort, () => {
+      currentBoundPort = currentPort;
       sendLog(`[SYSTEM] Starting DM Pro Server...`);
       sendLog(`[SYSTEM] Detected local IPv4 addresses: ${boundAddresses.join(', ')}`);
       sendLog(`[SYSTEM] Download receiver server strictly bound and listening on port ${currentPort}`);
@@ -120,4 +127,4 @@ function startServer(mainWindow) {
   startListening();
 }
 
-module.exports = { startServer, getLogHistory };
+module.exports = { startServer, getLogHistory, getActivePort };

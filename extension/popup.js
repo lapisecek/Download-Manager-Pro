@@ -2,28 +2,34 @@ const PORTS = [12345, 12346, 12347];
 let activePort = 12345;
 
 async function findActivePort() {
-  for (let port of PORTS) {
+  const checkPort = async (port) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 800);
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/ping`);
+      const res = await fetch(`http://127.0.0.1:${port}/api/ping`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
-        if (data.dmpro) {
-          activePort = port;
-          return port;
-        }
+        if (data && data.dmpro) return port;
       }
-    } catch (e) {
-      // silently ignore
-    }
+    } catch {}
+    throw new Error(`Port ${port} not active`);
+  };
+
+  try {
+    const port = await Promise.any(PORTS.map(checkPort));
+    activePort = port;
+    return port;
+  } catch {
+    throw new Error('DM Pro not reachable');
   }
-  throw new Error('DM Pro not reachable');
 }
 
 async function fetchApp(path, options = {}) {
   try {
     const res = await fetch(`http://127.0.0.1:${activePort}${path}`, options);
     return res;
-  } catch (e) {
+  } catch {
     await findActivePort();
     return fetch(`http://127.0.0.1:${activePort}${path}`, options);
   }
@@ -41,29 +47,31 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         const urlObj = new URL(tabs[0].url);
         currentUrl = urlObj.origin + '/';
-      } catch (e) {}
+      } catch {}
     }
   });
 
   const catchAllToggle = document.getElementById('catch-all-toggle');
   chrome.storage.local.get(['catchAll'], (result) => {
-    catchAllToggle.checked = !!result.catchAll;
+    if (catchAllToggle) catchAllToggle.checked = !!result.catchAll;
   });
 
-  catchAllToggle.addEventListener('change', (e) => {
-    chrome.storage.local.set({ catchAll: e.target.checked });
-  });
+  if (catchAllToggle) {
+    catchAllToggle.addEventListener('change', (e) => {
+      chrome.storage.local.set({ catchAll: e.target.checked });
+    });
+  }
 
   try {
     const res = await fetchApp('/api/settings');
     if (res.ok) {
       statusInd.className = 'dot connected';
-      statusText.innerText = 'Connected to DM Pro';
+      statusText.innerText = `Connected (Port ${activePort})`;
       addBtn.disabled = false;
 
       const data = await res.json();
       const prefixes = data.urlPrefixes || [];
-      
+
       if (prefixes.length === 0) {
         list.innerHTML = '<li style="color:#6b7280;">No prefixes set</li>';
       } else {
@@ -72,10 +80,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
       throw new Error();
     }
-  } catch (e) {
+  } catch {
     statusInd.className = 'dot disconnected';
     statusText.innerText = 'Disconnected';
-    list.innerHTML = '<li style="color:#ef4444;">Cannot reach DM Pro (Make sure it is running)</li>';
+    list.innerHTML = '<li style="color:#ef4444;">Cannot reach DM Pro (Ensure desktop app is open)</li>';
   }
 
   addBtn.addEventListener('click', async () => {
@@ -92,7 +100,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         addBtn.style.background = '#10b981';
         setTimeout(() => window.close(), 1000);
       }
-    } catch (e) {
+    } catch {
       addBtn.innerText = 'Error';
     }
   });
@@ -106,15 +114,15 @@ document.addEventListener('DOMContentLoaded', async () => {
           const item = downloads[0];
           try {
             catchBtn.innerText = 'Switching...';
-            // Send to DM Pro
             const res = await fetchApp('/api/download', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ url: item.url, filename: item.filename, headers: {} })
             });
             if (res.ok) {
-              chrome.downloads.cancel(item.id);
-              // Try to add origin to prefixes
+              try {
+                chrome.downloads.cancel(item.id);
+              } catch {}
               try {
                 const u = new URL(item.url);
                 await fetchApp('/api/add-prefix', {
@@ -122,14 +130,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ prefix: u.origin + '/' })
                 });
-              } catch(err) {}
+              } catch {}
               catchBtn.innerText = 'Caught!';
               catchBtn.style.background = '#10b981';
               setTimeout(() => window.close(), 1000);
             } else {
               catchBtn.innerText = 'Failed';
             }
-          } catch(e) {
+          } catch {
             catchBtn.innerText = 'App Unreachable';
           }
         } else {

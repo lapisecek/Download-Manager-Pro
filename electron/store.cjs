@@ -3,6 +3,7 @@ const path = require('path');
 const { app } = require('electron');
 
 const storePath = path.join(app.getPath('userData'), 'config.json');
+const tempPath = `${storePath}.tmp`;
 
 function readStore() {
   try {
@@ -16,21 +17,47 @@ function readStore() {
   return {};
 }
 
-function writeStore(data) {
+let saveTimeout = null;
+
+function writeStoreDirect(data) {
   try {
-    fs.writeFileSync(storePath, JSON.stringify(data, null, 2));
-  } catch (error) {
-    console.error('Error writing store', error);
+    const serialized = JSON.stringify(data, null, 2);
+    fs.writeFileSync(tempPath, serialized, 'utf-8');
+    fs.renameSync(tempPath, storePath);
+  } catch {
+    // If atomic rename fails (e.g., cross-device or lock), fallback to direct write
+    try {
+      fs.writeFileSync(storePath, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (writeErr) {
+      console.error('Error writing store', writeErr);
+    }
   }
 }
 
 let currentStore = readStore();
 
+function flush() {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+    saveTimeout = null;
+  }
+  writeStoreDirect(currentStore);
+}
+
 module.exports = {
   get: (key) => currentStore[key],
   set: (key, value) => {
     currentStore[key] = value;
-    writeStore(currentStore);
+    writeStoreDirect(currentStore);
   },
-  getAll: () => currentStore
+  setDebounced: (key, value, delayMs = 1500) => {
+    currentStore[key] = value;
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+      saveTimeout = null;
+      writeStoreDirect(currentStore);
+    }, delayMs);
+  },
+  getAll: () => currentStore,
+  flush
 };

@@ -2,28 +2,34 @@ const PORTS = [12345, 12346, 12347];
 let activePort = 12345;
 
 async function findActivePort() {
-  for (let port of PORTS) {
+  const checkPort = async (port) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 800);
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/ping`);
+      const res = await fetch(`http://127.0.0.1:${port}/api/ping`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
-        if (data.dmpro) {
-          activePort = port;
-          return port;
-        }
+        if (data && data.dmpro) return port;
       }
-    } catch (e) {
-      // silently fail if port is not active
-    }
+    } catch {}
+    throw new Error(`Port ${port} not active`);
+  };
+
+  try {
+    const port = await Promise.any(PORTS.map(checkPort));
+    activePort = port;
+    return port;
+  } catch {
+    throw new Error('DM Pro not reachable on any port');
   }
-  throw new Error('DM Pro not reachable on any port');
 }
 
 async function fetchApp(path, options = {}) {
   try {
     const res = await fetch(`http://127.0.0.1:${activePort}${path}`, options);
     return res;
-  } catch (e) {
+  } catch {
     // If connection failed, actively search for the correct port silently
     await findActivePort();
     return fetch(`http://127.0.0.1:${activePort}${path}`, options);
@@ -54,13 +60,13 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
           const itemUrl = new URL(item.url);
           const prefUrl = new URL(prefix.includes('://') ? prefix : `https://${prefix}`);
           return itemUrl.hostname.toLowerCase() === prefUrl.hostname.toLowerCase();
-        } catch(e) {
+        } catch {
           const normItem = item.url.toLowerCase();
           const normPref = prefix.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
           return normItem.includes(normPref);
         }
       });
-      
+
       if (matches) {
         return fetchApp('/api/download', {
           method: 'POST',
@@ -68,7 +74,9 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
           body: JSON.stringify({ url: item.url, filename: item.filename, headers: {} })
         }).then(res => {
           if (res.ok) {
-            chrome.downloads.cancel(item.id);
+            try {
+              chrome.downloads.cancel(item.id);
+            } catch {}
             chrome.notifications.create({
               type: 'basic',
               iconUrl: 'icon.png',
@@ -76,16 +84,22 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
               message: `Caught download: ${item.filename}`
             });
           }
-          suggest();
+          try {
+            suggest();
+          } catch {}
         });
       } else {
-        suggest();
+        try {
+          suggest();
+        } catch {}
       }
     })
-    .catch(e => {
+    .catch(() => {
       // DM Pro is closed or unreachable, fallback to normal Chrome download
-      suggest();
+      try {
+        suggest();
+      } catch {}
     });
-  
+
   return true;
 });

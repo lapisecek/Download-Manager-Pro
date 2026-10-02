@@ -1,5 +1,4 @@
 import { Jimp } from 'jimp';
-import path from 'path';
 
 async function makeTransparent(inputPath, outputPath) {
   try {

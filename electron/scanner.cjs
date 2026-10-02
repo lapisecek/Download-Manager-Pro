@@ -32,8 +32,8 @@ function queryVirusTotal(hash, apiKey) {
           try {
             const result = JSON.parse(data);
             resolve(result.data.attributes.last_analysis_stats);
-          } catch (e) {
-            reject(new Error('Invalid JSON from VirusTotal'));
+          } catch (err) {
+            reject(new Error(`Invalid JSON from VirusTotal: ${err.message}`));
           }
         } else if (res.statusCode === 404) {
           resolve({ not_found: true });
