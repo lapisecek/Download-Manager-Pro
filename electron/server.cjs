@@ -17,7 +17,18 @@ function getActivePort() {
 function startServer(mainWindow) {
   const app = express();
   app.use(cors({
-    origin: '*',
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        origin.startsWith('chrome-extension://') ||
+        origin.startsWith('moz-extension://') ||
+        origin.startsWith('http://localhost') ||
+        origin.startsWith('http://127.0.0.1')
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error('Blocked by CORS'));
+    },
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type']
   }));
@@ -53,14 +64,18 @@ function startServer(mainWindow) {
   });
 
   app.post('/api/download', (req, res) => {
-    const { url, filename, headers } = req.body;
-    if (url) {
-      sendLog(`[DOWNLOAD] Received: ${url}`);
-      addDownload(url, filename, headers, mainWindow);
-      res.json({ success: true });
-    } else {
-      res.status(400).json({ success: false, error: 'URL required' });
+    const { url, filename, headers } = req.body || {};
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ success: false, error: 'URL required' });
     }
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://')) {
+      return res.status(400).json({ success: false, error: 'Only HTTP and HTTPS URLs supported' });
+    }
+
+    sendLog(`[DOWNLOAD] Received: ${trimmedUrl}`);
+    addDownload(trimmedUrl, filename, headers, mainWindow);
+    res.json({ success: true });
   });
 
   app.get('/api/settings', (req, res) => {
@@ -103,11 +118,11 @@ function startServer(mainWindow) {
       return;
     }
     const currentPort = PORTS[portIndex];
-    const server = app.listen(currentPort, () => {
+    const server = app.listen(currentPort, '127.0.0.1', () => {
       currentBoundPort = currentPort;
       sendLog(`[SYSTEM] Starting DM Pro Server...`);
       sendLog(`[SYSTEM] Detected local IPv4 addresses: ${boundAddresses.join(', ')}`);
-      sendLog(`[SYSTEM] Download receiver server strictly bound and listening on port ${currentPort}`);
+      sendLog(`[SYSTEM] Download receiver server strictly bound to 127.0.0.1:${currentPort}`);
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('server-port-bound', currentPort);
       }

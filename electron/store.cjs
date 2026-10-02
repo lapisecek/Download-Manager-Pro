@@ -21,6 +21,8 @@ let saveTimeout = null;
 
 function writeStoreDirect(data) {
   try {
+    const dir = path.dirname(storePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const serialized = JSON.stringify(data, null, 2);
     fs.writeFileSync(tempPath, serialized, 'utf-8');
     fs.renameSync(tempPath, storePath);
@@ -48,6 +50,11 @@ module.exports = {
   get: (key) => currentStore[key],
   set: (key, value) => {
     currentStore[key] = value;
+    writeStoreDirect(currentStore);
+  },
+  setMultiple: (entries) => {
+    if (!entries || typeof entries !== 'object') return;
+    Object.assign(currentStore, entries);
     writeStoreDirect(currentStore);
   },
   setDebounced: (key, value, delayMs = 1500) => {

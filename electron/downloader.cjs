@@ -49,10 +49,40 @@ function generateId() {
   return Math.random().toString(36).substring(2, 9);
 }
 
+function sanitizeFilename(filename) {
+  if (!filename) return 'downloaded_file';
+  let clean = filename;
+  try {
+    clean = decodeURIComponent(clean);
+  } catch {}
+  clean = path.basename(clean);
+  // eslint-disable-next-line no-control-regex
+  clean = clean.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').trim();
+  clean = clean.replace(/[. ]+$/, '');
+  if (!clean || clean === '.' || clean === '..') clean = 'downloaded_file';
+  return clean;
+}
+
+function extractFilenameFromHeader(header) {
+  if (!header || typeof header !== 'string') return null;
+  const utf8Match = header.match(/filename\*=(?:UTF-8'')?([^";\r\n]+)/i);
+  if (utf8Match && utf8Match[1]) {
+    try {
+      return sanitizeFilename(decodeURIComponent(utf8Match[1].replace(/['"]/g, '')));
+    } catch {}
+  }
+  const match = header.match(/filename=(?:["']?)([^";\r\n]+)(?:["']?)/i);
+  if (match && match[1]) {
+    return sanitizeFilename(match[1].replace(/['"]/g, ''));
+  }
+  return null;
+}
+
 function getSafeFilePath(basePath, filename) {
-  const ext = path.extname(filename);
-  const name = path.basename(filename, ext);
-  let finalPath = path.join(basePath, filename);
+  const cleanName = sanitizeFilename(filename);
+  const ext = path.extname(cleanName);
+  const name = path.basename(cleanName, ext);
+  let finalPath = path.join(basePath, cleanName);
   let counter = 1;
   while (fs.existsSync(finalPath)) {
     finalPath = path.join(basePath, `${name} (${counter})${ext}`);
@@ -64,10 +94,11 @@ function getSafeFilePath(basePath, filename) {
 function getCategorizedPath(basePath, filename) {
   const ext = path.extname(filename).toLowerCase();
   let folder = '';
-  if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp'].includes(ext)) folder = 'Images';
-  else if (['.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv'].includes(ext)) folder = 'Videos';
-  else if (['.pdf', '.doc', '.docx', '.txt', '.xlsx', '.csv', '.ppt', '.pptx'].includes(ext)) folder = 'Documents';
-  else if (['.exe', '.msi', '.zip', '.rar', '.7z', '.tar', '.gz', '.iso'].includes(ext)) folder = 'Software';
+  if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.ico', '.tiff'].includes(ext)) folder = 'Images';
+  else if (['.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.wmv', '.m4v'].includes(ext)) folder = 'Videos';
+  else if (['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.wma', '.opus'].includes(ext)) folder = 'Audio';
+  else if (['.pdf', '.doc', '.docx', '.txt', '.xlsx', '.csv', '.ppt', '.pptx', '.epub'].includes(ext)) folder = 'Documents';
+  else if (['.exe', '.msi', '.zip', '.rar', '.7z', '.tar', '.gz', '.iso', '.dmg', '.apk'].includes(ext)) folder = 'Software';
   
   if (folder) {
     const catPath = path.join(basePath, folder);
@@ -87,8 +118,11 @@ function getClient(urlStr) {
   return urlStr.startsWith('https:') ? https : http;
 }
 
-async function getFileInfo(url, maxRedirects = 5) {
+async function getFileInfo(url, maxRedirects = 5, signal = null) {
   return new Promise((resolve, reject) => {
+    if (signal && signal.aborted) {
+      return reject(new Error('Aborted'));
+    }
     if (maxRedirects <= 0) {
       return reject(new Error('Too many redirects while probing file headers'));
     }
@@ -109,25 +143,31 @@ async function getFileInfo(url, maxRedirects = 5) {
       }
     };
 
+    let settled = false;
     const req = client.request(urlObj.href, options, (res) => {
+      if (settled) return;
       // Handle HTTP redirects
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume();
         try {
           const nextUrl = new URL(res.headers.location, urlObj.href).href;
-          return getFileInfo(nextUrl, maxRedirects - 1).then(resolve).catch(reject);
+          return getFileInfo(nextUrl, maxRedirects - 1, signal).then(resolve).catch(reject);
         } catch (e) {
+          settled = true;
           return reject(e);
         }
       }
 
-      // If server does not support HEAD (405 Method Not Allowed or 403), fallback to GET range probe
+      const suggestedFilename = extractFilenameFromHeader(res.headers['content-disposition']);
+
+      // If server does not support HEAD (405 Method Not Allowed or 501), fallback to GET range probe
       if (res.statusCode === 405 || res.statusCode === 501) {
         res.resume();
         const getReq = client.request(urlObj.href, {
           method: 'GET',
           headers: { 'Range': 'bytes=0-0', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) DMPro/1.0' }
         }, (getRes) => {
+          if (settled) return;
           getRes.resume();
           const contentRange = getRes.headers['content-range'];
           let size = 0;
@@ -138,13 +178,32 @@ async function getFileInfo(url, maxRedirects = 5) {
           if (!size && getRes.headers['content-length']) {
             size = parseInt(getRes.headers['content-length'], 10);
           }
+          const getSuggested = extractFilenameFromHeader(getRes.headers['content-disposition']);
+          settled = true;
           resolve({
             size,
             acceptRanges: getRes.statusCode === 206 || getRes.headers['accept-ranges'] === 'bytes',
-            finalUrl: urlObj.href
+            finalUrl: urlObj.href,
+            suggestedFilename: getSuggested || suggestedFilename
           });
         });
-        getReq.on('error', reject);
+
+        if (signal) {
+          signal.addEventListener('abort', () => {
+            getReq.destroy(new Error('Aborted'));
+            if (!settled) {
+              settled = true;
+              reject(new Error('Aborted'));
+            }
+          }, { once: true });
+        }
+
+        getReq.on('error', (err) => {
+          if (!settled) {
+            settled = true;
+            reject(err);
+          }
+        });
         getReq.end();
         return;
       }
@@ -153,36 +212,58 @@ async function getFileInfo(url, maxRedirects = 5) {
       const acceptRanges = res.headers['accept-ranges'] === 'bytes';
       res.resume();
 
+      settled = true;
       resolve({
         size: parseInt(contentLength || '0', 10),
         acceptRanges,
-        finalUrl: urlObj.href
+        finalUrl: urlObj.href,
+        suggestedFilename
       });
     });
+
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        req.destroy(new Error('Aborted'));
+        if (!settled) {
+          settled = true;
+          reject(new Error('Aborted'));
+        }
+      }, { once: true });
+    }
 
     req.on('timeout', () => {
       req.destroy(new Error('Connection timed out probing file'));
     });
-    req.on('error', reject);
+    req.on('error', (err) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    });
     req.end();
   });
 }
 
 async function addDownload(url, filename, _reqHeaders, mainWindow) {
   const id = generateId();
-  if (!filename) {
+  let sanitizedName = '';
+  if (filename) {
+    sanitizedName = sanitizeFilename(filename);
+  }
+  if (!sanitizedName || sanitizedName === 'downloaded_file') {
     try {
       const urlObj = new URL(url);
-      filename = path.basename(urlObj.pathname) || 'downloaded_file';
-      if (!filename || filename === '/') filename = 'downloaded_file';
+      const urlBase = path.basename(urlObj.pathname);
+      sanitizedName = sanitizeFilename(urlBase);
     } catch {
-      filename = 'downloaded_file';
+      sanitizedName = 'downloaded_file';
     }
   }
+  if (!sanitizedName) sanitizedName = 'downloaded_file';
 
   let downloadPath = store.get('downloadPath') || app.getPath('downloads');
   if (store.get('smartCategorization')) {
-    downloadPath = getCategorizedPath(downloadPath, filename);
+    downloadPath = getCategorizedPath(downloadPath, sanitizedName);
   }
 
   // Ensure download folder exists
@@ -192,14 +273,14 @@ async function addDownload(url, filename, _reqHeaders, mainWindow) {
     } catch {}
   }
 
-  const safeInfo = getSafeFilePath(downloadPath, filename);
-  filename = safeInfo.newFilename;
+  const safeInfo = getSafeFilePath(downloadPath, sanitizedName);
+  const finalFilename = safeInfo.newFilename;
   const filePath = safeInfo.finalPath;
 
   const state = {
     id,
     url,
-    filename,
+    filename: finalFilename,
     filePath,
     status: 'starting',
     progress: 0,
@@ -210,6 +291,8 @@ async function addDownload(url, filename, _reqHeaders, mainWindow) {
     startTime: Date.now(),
     dateFinished: null,
     retries: 0,
+    retryTimer: null,
+    lastChunkTime: Date.now(),
     vtStatus: 'none',
     vtStats: null,
     currentSpeedLimit: 0,
@@ -224,8 +307,49 @@ async function addDownload(url, filename, _reqHeaders, mainWindow) {
 }
 
 async function startDownload(id, state, mainWindow, redirectHops = 5) {
+  // Check if state is paused or cancelled before doing anything
+  const currentInitial = downloadStates.get(id);
+  if (!currentInitial || currentInitial.status === 'paused' || currentInitial.status === 'error' || currentInitial.hidden) {
+    return;
+  }
+
+  // Clean up any existing active context
+  if (activeDownloads.has(id)) {
+    const prev = activeDownloads.get(id);
+    prev.isManualAbort = true;
+    if (prev.abortController) prev.abortController.abort();
+    if (prev.throttleTimer) clearTimeout(prev.throttleTimer);
+    if (prev.res) prev.res.destroy();
+    if (prev.fileStream) prev.fileStream.destroy();
+    activeDownloads.delete(id);
+  }
+
+  const abortController = new AbortController();
+  const downloadContext = {
+    req: null,
+    res: null,
+    fileStream: null,
+    isManualAbort: false,
+    abortController,
+    throttleTimer: null
+  };
+  activeDownloads.set(id, downloadContext);
+
   try {
-    const info = await getFileInfo(state.url);
+    const probeTarget = state.finalUrl || state.url;
+    const info = await getFileInfo(probeTarget, 5, abortController.signal);
+
+    // Check if user paused or cancelled while probing
+    if (downloadContext.isManualAbort) {
+      activeDownloads.delete(id);
+      return;
+    }
+    const currentAfterProbe = downloadStates.get(id);
+    if (!currentAfterProbe || currentAfterProbe.status === 'paused' || currentAfterProbe.status === 'error' || currentAfterProbe.hidden) {
+      activeDownloads.delete(id);
+      return;
+    }
+
     state.totalBytes = info.size || state.totalBytes;
     state.status = 'downloading';
     state.finalUrl = info.finalUrl;
@@ -237,6 +361,7 @@ async function startDownload(id, state, mainWindow, redirectHops = 5) {
         const stats = fs.statfsSync(path.dirname(state.filePath));
         const freeSpace = stats.bavail * stats.bsize;
         if (info.size > 0 && freeSpace < info.size) {
+          activeDownloads.delete(id);
           updateState(id, { status: 'error', errorMsg: 'Not enough disk space' }, mainWindow, true);
           return;
         }
@@ -245,21 +370,21 @@ async function startDownload(id, state, mainWindow, redirectHops = 5) {
 
     let downloadedBytes = 0;
     const fileExists = fs.existsSync(state.filePath);
-    if (fileExists && info.acceptRanges) {
-      downloadedBytes = fs.statSync(state.filePath).size;
-      if (info.size > 0 && downloadedBytes === info.size) {
-        state.downloadedBytes = downloadedBytes;
+    if (fileExists) {
+      const existingSize = fs.statSync(state.filePath).size;
+      if (info.size > 0 && existingSize === info.size) {
+        state.downloadedBytes = existingSize;
         state.progress = 100;
+        activeDownloads.delete(id);
         await finishDownload(id, state, mainWindow);
         return;
       }
-      if (info.size > 0 && downloadedBytes > info.size) {
-        fs.unlinkSync(state.filePath);
+      if (info.size > 0 && existingSize > info.size) {
+        try { fs.unlinkSync(state.filePath); } catch {}
         downloadedBytes = 0;
+      } else {
+        downloadedBytes = existingSize;
       }
-    } else if (fileExists && !info.acceptRanges) {
-      fs.unlinkSync(state.filePath);
-      downloadedBytes = 0;
     }
 
     state.downloadedBytes = downloadedBytes;
@@ -269,18 +394,9 @@ async function startDownload(id, state, mainWindow, redirectHops = 5) {
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) DMPro/1.0'
     };
-    if (downloadedBytes > 0 && info.acceptRanges) {
+    if (downloadedBytes > 0) {
       headers['Range'] = `bytes=${downloadedBytes}-`;
     }
-
-    const downloadContext = {
-      req: null,
-      res: null,
-      fileStream: null,
-      isManualAbort: false,
-      throttleTimer: null
-    };
-    activeDownloads.set(id, downloadContext);
 
     const req = client.get(state.finalUrl, { headers }, (res) => {
       downloadContext.res = res;
@@ -333,7 +449,17 @@ async function startDownload(id, state, mainWindow, redirectHops = 5) {
 
       res.on('data', (chunk) => {
         state.downloadedBytes += chunk.length;
-        fileStream.write(chunk);
+        state.lastChunkTime = Date.now();
+
+        // Handle stream backpressure
+        if (!fileStream.write(chunk)) {
+          res.pause();
+          fileStream.once('drain', () => {
+            if (!downloadContext.isManualAbort && activeDownloads.has(id) && downloadContext.res) {
+              downloadContext.res.resume();
+            }
+          });
+        }
 
         // Smooth Bandwidth Throttling
         const speedLimit = state.currentSpeedLimit || (store.get('speedLimit') || 0);
@@ -374,6 +500,15 @@ async function startDownload(id, state, mainWindow, redirectHops = 5) {
         if (downloadContext.throttleTimer) clearTimeout(downloadContext.throttleTimer);
         activeDownloads.delete(id);
 
+        if (downloadContext.isManualAbort) return;
+
+        // Incomplete download check (premature socket termination)
+        if (state.totalBytes > 0 && state.downloadedBytes < state.totalBytes) {
+          fileStream.end();
+          handleRetry(id, state, mainWindow, `Premature stream termination (${state.downloadedBytes}/${state.totalBytes} bytes)`);
+          return;
+        }
+
         fileStream.end();
         fileStream.on('finish', () => {
           if (state.status === 'downloading') {
@@ -398,19 +533,31 @@ async function startDownload(id, state, mainWindow, redirectHops = 5) {
     });
 
   } catch (error) {
+    if (downloadContext.isManualAbort) {
+      activeDownloads.delete(id);
+      return;
+    }
+    activeDownloads.delete(id);
     handleRetry(id, state, mainWindow, error.message);
   }
 }
 
 function handleRetry(id, state, mainWindow, reason = '') {
+  const current = downloadStates.get(id);
+  if (!current || current.status === 'paused' || current.status === 'error' || current.hidden) {
+    return;
+  }
+
   if (state.retries < 3) {
     state.retries++;
     state.status = 'retrying';
     updateState(id, {}, mainWindow, true);
-    setTimeout(() => {
-      const current = downloadStates.get(id);
-      if (current && current.status === 'retrying') {
-        startDownload(id, current, mainWindow);
+    if (state.retryTimer) clearTimeout(state.retryTimer);
+    state.retryTimer = setTimeout(() => {
+      state.retryTimer = null;
+      const latest = downloadStates.get(id);
+      if (latest && latest.status === 'retrying') {
+        startDownload(id, latest, mainWindow);
       }
     }, 3000);
   } else {
@@ -457,6 +604,7 @@ function pauseDownload(id, mainWindow) {
   const download = activeDownloads.get(id);
   if (download) {
     download.isManualAbort = true;
+    if (download.abortController) download.abortController.abort();
     if (download.throttleTimer) clearTimeout(download.throttleTimer);
     if (download.res) download.res.destroy();
     if (download.fileStream) download.fileStream.end();
@@ -464,6 +612,10 @@ function pauseDownload(id, mainWindow) {
   }
   const state = downloadStates.get(id);
   if (state) {
+    if (state.retryTimer) {
+      clearTimeout(state.retryTimer);
+      state.retryTimer = null;
+    }
     state.status = 'paused';
     state.speed = 0;
     state.etaSeconds = 0;
@@ -485,13 +637,18 @@ function cancelDownload(id, mainWindow) {
   const download = activeDownloads.get(id);
   if (download) {
     download.isManualAbort = true;
+    if (download.abortController) download.abortController.abort();
     if (download.throttleTimer) clearTimeout(download.throttleTimer);
     if (download.res) download.res.destroy();
-    if (download.fileStream) download.fileStream.end();
+    if (download.fileStream) download.fileStream.destroy();
     activeDownloads.delete(id);
   }
   const state = downloadStates.get(id);
   if (state) {
+    if (state.retryTimer) {
+      clearTimeout(state.retryTimer);
+      state.retryTimer = null;
+    }
     state.status = 'error';
     state.errorMsg = 'Cancelled by user';
     state.speed = 0;
@@ -509,10 +666,12 @@ savedDownloads.forEach(d => {
     d.etaSeconds = 0;
   }
   downloadStates.set(d.id, d);
-  priorityOrder.push(d.id);
+  if (!priorityOrder.includes(d.id)) {
+    priorityOrder.push(d.id);
+  }
 });
 
-// Bandwidth Orchestrator
+// Bandwidth Orchestrator with speed decay for stalled transfers
 setInterval(() => {
   const maxFull = store.get('maxFullSpeedDownloads') || 2;
   const throttled = store.get('throttledSpeedLimit') || 500;
@@ -529,6 +688,7 @@ setInterval(() => {
     return indexA - indexB;
   });
 
+  const now = Date.now();
   activeIds.forEach((id, index) => {
     const state = downloadStates.get(id);
     if (!state) return;
@@ -536,6 +696,11 @@ setInterval(() => {
       state.currentSpeedLimit = globalLimit;
     } else {
       state.currentSpeedLimit = globalLimit > 0 ? Math.min(globalLimit, throttled) : throttled;
+    }
+
+    // Decay speed to 0 if data stalled for over 2 seconds
+    if (state.lastChunkTime && (now - state.lastChunkTime > 2000) && state.speed > 0) {
+      state.speed = 0;
     }
   });
 }, 1000);
@@ -569,21 +734,51 @@ function reorderDownloads(orderedIds, _mainWindow) {
 }
 
 function clearDownload(id, mainWindow) {
+  const download = activeDownloads.get(id);
+  if (download) {
+    download.isManualAbort = true;
+    if (download.abortController) download.abortController.abort();
+    if (download.throttleTimer) clearTimeout(download.throttleTimer);
+    if (download.res) download.res.destroy();
+    if (download.fileStream) download.fileStream.destroy();
+    activeDownloads.delete(id);
+  }
   const state = downloadStates.get(id);
-  if (state) state.hidden = true;
+  if (state) {
+    if (state.retryTimer) {
+      clearTimeout(state.retryTimer);
+      state.retryTimer = null;
+    }
+    state.hidden = true;
+  }
   priorityOrder = priorityOrder.filter(pid => pid !== id);
   updateState(id, {}, mainWindow, true);
 }
 
 function deleteFileDownload(id, mainWindow) {
+  const download = activeDownloads.get(id);
+  if (download) {
+    download.isManualAbort = true;
+    if (download.abortController) download.abortController.abort();
+    if (download.throttleTimer) clearTimeout(download.throttleTimer);
+    if (download.res) download.res.destroy();
+    if (download.fileStream) download.fileStream.destroy();
+    activeDownloads.delete(id);
+  }
   const state = downloadStates.get(id);
   if (state) {
+    if (state.retryTimer) {
+      clearTimeout(state.retryTimer);
+      state.retryTimer = null;
+    }
     state.hidden = true;
     try {
       if (fs.existsSync(state.filePath)) {
         fs.unlinkSync(state.filePath);
       }
-    } catch {}
+    } catch (e) {
+      console.error('Failed to unlink file on delete:', e.message);
+    }
   }
   priorityOrder = priorityOrder.filter(pid => pid !== id);
   updateState(id, {}, mainWindow, true);

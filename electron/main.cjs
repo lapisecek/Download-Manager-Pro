@@ -17,7 +17,8 @@ const defaults = {
   autoStart: false,
   maxFullSpeedDownloads: 2,
   throttledSpeedLimit: 500,
-  autoVtScan: false
+  autoVtScan: false,
+  clipboardWatch: true
 };
 
 Object.keys(defaults).forEach(key => {
@@ -115,13 +116,17 @@ function startClipboardMonitor() {
 
   clipboardInterval = setInterval(() => {
     try {
+      if (store.get('clipboardWatch') === false) return;
       const text = clipboard.readText();
       if (text && text !== lastText) {
         lastText = text;
-        const prefixes = store.get('urlPrefixes') || [];
-        if (prefixes.length > 0 && prefixes.some(p => text.startsWith(p))) {
-          const { addDownload } = require('./downloader.cjs');
-          addDownload(text, null, {}, mainWindow);
+        const trimmed = text.trim();
+        if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+          const prefixes = store.get('urlPrefixes') || [];
+          if (prefixes.length > 0 && prefixes.some(p => trimmed.startsWith(p.trim()))) {
+            const { addDownload } = require('./downloader.cjs');
+            addDownload(trimmed, null, {}, mainWindow);
+          }
         }
       }
     } catch {}
@@ -177,7 +182,7 @@ ipcMain.handle('get-settings', () => store.getAll());
 
 ipcMain.handle('save-settings', (_event, settings) => {
   if (!settings || typeof settings !== 'object') return false;
-  Object.keys(settings).forEach(key => store.set(key, settings[key]));
+  store.setMultiple(settings);
 
   try {
     app.setLoginItemSettings({
@@ -208,6 +213,7 @@ ipcMain.handle('get-downloads', () => store.get('downloads') || []);
 
 // Downloader actions
 const {
+  addDownload,
   pauseDownload,
   resumeDownload,
   cancelDownload,
@@ -216,6 +222,14 @@ const {
   scanFileManual,
   deleteFileDownload
 } = require('./downloader.cjs');
+
+ipcMain.handle('add-download', (_event, { url, filename } = {}) => {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return false;
+  addDownload(trimmed, filename ? filename.trim() : null, {}, mainWindow);
+  return true;
+});
 
 ipcMain.handle('pause-download', (_event, id) => pauseDownload(id, mainWindow));
 ipcMain.handle('resume-download', (_event, id) => resumeDownload(id, mainWindow));
