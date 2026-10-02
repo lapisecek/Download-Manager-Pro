@@ -48,6 +48,12 @@ fetchApp('/api/heartbeat', { method: 'POST' }).catch(() => {});
 
 // Fetch settings instantly on download start
 chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
+  // Never intercept blob or data URLs as desktop app cannot access renderer process memory
+  if (!item || !item.url || item.url.startsWith('blob:') || item.url.startsWith('data:')) {
+    try { suggest(); } catch {}
+    return;
+  }
+
   Promise.all([
     fetchApp('/api/settings').then(r => r.ok ? r.json() : { urlPrefixes: [] }).catch(() => ({ urlPrefixes: [] })),
     new Promise(resolve => chrome.storage.local.get(['catchAll'], resolve))
@@ -56,13 +62,20 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
       const urlPrefixes = data.urlPrefixes || [];
       const catchAll = !!storage.catchAll;
       const matches = catchAll || urlPrefixes.some(prefix => {
+        if (!prefix) return false;
+        const cleanPref = prefix.trim();
+        if (item.url.startsWith(cleanPref)) return true;
         try {
           const itemUrl = new URL(item.url);
-          const prefUrl = new URL(prefix.includes('://') ? prefix : `https://${prefix}`);
-          return itemUrl.hostname.toLowerCase() === prefUrl.hostname.toLowerCase();
+          const prefUrl = new URL(cleanPref.includes('://') ? cleanPref : `https://${cleanPref}`);
+          if (prefUrl.pathname && prefUrl.pathname !== '/') {
+            return itemUrl.href.toLowerCase().startsWith(prefUrl.href.toLowerCase().replace(/\/$/, ''));
+          }
+          return itemUrl.hostname.toLowerCase() === prefUrl.hostname.toLowerCase() ||
+                 itemUrl.hostname.toLowerCase().endsWith('.' + prefUrl.hostname.toLowerCase());
         } catch {
           const normItem = item.url.toLowerCase();
-          const normPref = prefix.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+          const normPref = cleanPref.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
           return normItem.includes(normPref);
         }
       });

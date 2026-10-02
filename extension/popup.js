@@ -112,6 +112,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (downloads.length > 0) {
           downloads.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
           const item = downloads[0];
+          if (!item.url || item.url.startsWith('blob:') || item.url.startsWith('data:')) {
+            catchBtn.innerText = 'Cannot catch blob/data URLs';
+            setTimeout(() => { catchBtn.innerText = 'Catch Current Download'; }, 2000);
+            return;
+          }
           try {
             catchBtn.innerText = 'Switching...';
             const res = await fetchApp('/api/download', {
