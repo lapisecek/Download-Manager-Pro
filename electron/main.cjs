@@ -88,11 +88,11 @@ function createTray() {
     const iconPath = resolveIconPath();
     tray = new Tray(iconPath);
     const contextMenu = Menu.buildFromTemplate([
-      { label: 'Show DM Pro', click: () => { if (mainWindow) mainWindow.show(); } },
+      { label: 'Show Veloce DM', click: () => { if (mainWindow) mainWindow.show(); } },
       { type: 'separator' },
       { label: 'Quit', click: () => { app.isQuiting = true; app.quit(); } }
     ]);
-    tray.setToolTip('DM Pro');
+    tray.setToolTip('Veloce DM');
     tray.setContextMenu(contextMenu);
     tray.on('click', () => {
       if (mainWindow) {

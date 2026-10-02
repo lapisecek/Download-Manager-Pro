@@ -10,7 +10,7 @@ async function findActivePort() {
       clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
-        if (data && data.dmpro) return port;
+        if (data && (data.veloce || data.dmpro)) return port;
       }
     } catch {}
     throw new Error(`Port ${port} not active`);
@@ -21,7 +21,7 @@ async function findActivePort() {
     activePort = port;
     return port;
   } catch {
-    throw new Error('DM Pro not reachable');
+    throw new Error('Veloce DM not reachable');
   }
 }
 
@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch {
     statusInd.className = 'dot disconnected';
     statusText.innerText = 'Disconnected';
-    list.innerHTML = '<li style="color:#ef4444;">Cannot reach DM Pro (Ensure desktop app is open)</li>';
+    list.innerHTML = '<li style="color:#ef4444;">Cannot reach Veloce DM (Ensure desktop app is open)</li>';
   }
 
   addBtn.addEventListener('click', async () => {

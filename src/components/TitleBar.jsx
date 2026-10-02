@@ -15,7 +15,7 @@ function TitleBar() {
       <div className="title-bar-drag-area">
         <div className="title-brand">
           <DownloadCloud size={14} />
-          <span>DM Pro</span>
+          <span>Veloce DM</span>
         </div>
       </div>
       <div className="title-bar-controls">

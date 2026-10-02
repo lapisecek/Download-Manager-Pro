@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "DM Pro Catcher",
-  "version": "1.0",
-  "description": "Catches downloads and sends them to DM Pro desktop app.",
+  "name": "Veloce Download Companion",
+  "version": "1.0.0",
+  "description": "Routes browser downloads directly to your local Veloce desktop download accelerator.",
   "permissions": [
     "downloads",
     "alarms",

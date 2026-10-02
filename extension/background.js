@@ -10,7 +10,7 @@ async function findActivePort() {
       clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
-        if (data && data.dmpro) return port;
+        if (data && (data.veloce || data.dmpro)) return port;
       }
     } catch {}
     throw new Error(`Port ${port} not active`);
@@ -21,7 +21,7 @@ async function findActivePort() {
     activePort = port;
     return port;
   } catch {
-    throw new Error('DM Pro not reachable on any port');
+    throw new Error('Veloce DM not reachable on any port');
   }
 }
 
@@ -93,7 +93,7 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
             chrome.notifications.create({
               type: 'basic',
               iconUrl: 'icon.png',
-              title: 'DM Pro',
+              title: 'Veloce DM',
               message: `Caught download: ${item.filename}`
             });
           }
@@ -108,7 +108,7 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
       }
     })
     .catch(() => {
-      // DM Pro is closed or unreachable, fallback to normal Chrome download
+      // Veloce DM is closed or unreachable, fallback to normal Chrome download
       try {
         suggest();
       } catch {}

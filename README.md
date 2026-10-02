@@ -1,64 +1,160 @@
-# Download Manager Pro (DM Pro) - v1.0
+<p align="center">
+  <img src="docs/icon.png" width="80" alt="Veloce DM Logo" />
+</p>
 
-Welcome to DM Pro, a fully functional, highly customized desktop Download Manager with a seamless Chrome Extension integration. 
+<h1 align="center">Veloce Download Manager</h1>
 
-## Key Features
+<p align="center">
+  <strong>High-performance desktop download accelerator and security auditor with native Chromium browser integration.</strong>
+</p>
 
-- **Chrome Integration**: Instantly catch downloads via the companion Chrome extension. 
-- **"Catch Current Download"**: A powerful feature in the extension popup to instantly snatch a download actively running in Chrome and move it to DM Pro seamlessly.
-- **Smart Priority Management**: The top 2 active downloads are assigned full bandwidth, while others are intelligently throttled.
-- **Global ETA & Stats**: Monitor combined bandwidth, total remaining time, and active tasks directly from the UI.
-- **Built-in VirusTotal Scanning**: Automatically or manually scan downloaded files against 70+ security vendors, complete with an interactive report modal.
-- **Categorized History**: Automatically tracks finished and errored downloads with distinct visualizations.
-- **Premium Interface**: A completely custom, frameless glassmorphism design with drag-and-drop prioritization.
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Windows-blue?style=flat-square" alt="Platform" />
+  <img src="https://img.shields.io/badge/Electron-43.1.0-47848F?style=flat-square" alt="Electron" />
+  <img src="https://img.shields.io/badge/React-19.2.7-61DAFB?style=flat-square" alt="React" />
+  <img src="https://img.shields.io/badge/Vite-8.1.4-646CFF?style=flat-square" alt="Vite" />
+  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License" />
+</p>
+
+<p align="center">
+  <img src="docs/hero.png" width="820" alt="Veloce Download Manager Interface" />
+</p>
 
 ---
 
-## 1. Installing the Desktop Application
+## Overview
 
-The application is bundled into a ready-to-use executable:
+Veloce Download Manager is an engineered desktop download accelerator designed for speed, resilience, and security. Built with Electron and React, Veloce couples deep network streaming optimizations with an intuitive glassmorphic dashboard and a companion Chromium browser extension (Manifest V3).
 
-1. Navigate to the release folder located at: CustomDownloadManager\release\
-2. Double-click DM Pro Setup 0.0.0.exe (or the standalone .exe inside the win-unpacked folder).
-3. The DM Pro application will open. Leave it running in the background while you set up the extension.
+Veloce intercepts high-volume downloads, orchestrates parallel byte-range streams, throttles background tasks dynamically based on queue priority, and conducts automated hash-based threat verification using VirusTotal.
 
-(Note: If DM Pro is closed, the Chrome extension will automatically stop catching your downloads and allow Chrome to download them normally.)
+---
 
-## 2. Setting up the Chrome Extension
+## Key Capabilities
 
-To let Chrome talk to DM Pro, load the companion extension:
+- **High-Throughput Streaming Engine**: Handles HTTP byte-range requests with automatic resume capabilities, streaming backpressure management, and drop-connection detection.
+- **Native Browser Companion**: Manifest V3 extension intercepts downloads from Google Chrome, Brave, Edge, and other Chromium browsers via local IPC loopback.
+- **Intelligent Bandwidth Scheduling**: Automatically assigns unrestricted bandwidth to top-priority transfers while intelligently pacing background items.
+- **Automated Threat Intelligence**: Scans downloaded files against 70+ antivirus and threat intelligence engines via the integrated VirusTotal v3 API.
+- **Universal Ingestion**: Catch downloads via browser triggers, automated system clipboard detection, or direct manual URL submission.
+- **Smart Categorization**: Organizes downloads into dedicated directories (Images, Videos, Audio, Documents, Software) based on MIME types and file signatures.
+- **Hardened Local Security**: Bound strictly to `127.0.0.1` with explicit cross-origin validation to prevent unauthorized network or browser access.
 
-1. Download DM_Pro_Extension_v1.0.zip from the Releases tab and extract it to a folder on your computer.
-2. Open Google Chrome.
-3. Type chrome://extensions/ into the URL bar and hit Enter.
-4. In the top-right corner, toggle on Developer mode.
-5. Click the Load unpacked button in the top-left corner.
-6. In the file picker, select the folder where you extracted the extension.
-7. You should now see the DM Pro Catcher extension active.
+---
 
-## 3. Configuring Auto-Catch
+## System Architecture
 
-By default, the extension won't catch anything until you tell it which URLs to look for:
+```mermaid
+flowchart LR
+    subgraph Browser ["Chromium Browser"]
+        Ext["Veloce Companion (MV3)"]
+        Popup["Quick Action Popup"]
+    end
 
-1. Open your running DM Pro desktop app.
-2. Click on the Settings icon in the sidebar.
-3. Under the "Chrome Extension Integration" section, add a URL prefix.
-   - For example, if you frequently download files from a server like https://speed.hetzner.de/, type that into the box and click the + button.
-   - The extension will instantly sync this new rule.
-4. Try downloading a file from that prefix in Chrome. The extension will catch it, cancel the Chrome download, and instantly start it inside DM Pro.
-5. Alternative: You can manually click "Catch Current Download" in the extension popup when a Chrome download starts to pull it over without setting rules beforehand.
+    subgraph DesktopApp ["Desktop Application (Electron + React)"]
+        API["Local Bridge (127.0.0.1:12345)"]
+        Engine["Streaming Engine (downloader.cjs)"]
+        Scanner["VirusTotal Auditor (scanner.cjs)"]
+        UI["Glassmorphic Interface (React 19)"]
+        Store["Atomic Configuration (store.cjs)"]
+    end
 
-## Development Setup
+    subgraph Web ["Remote Services"]
+        RemoteServer["Target File Server"]
+        VTAPI["VirusTotal API v3"]
+    end
 
-If you want to build DM Pro from source:
+    Ext -->|"Auto-Catch / API POST"| API
+    Popup -->|"Manual Snatch"| API
+    API --> Engine
+    UI --> Engine
+    Engine -->|"Range Stream / Sockets"| RemoteServer
+    Engine --> Store
+    Scanner -->|"SHA-256 Analysis"| VTAPI
+    Scanner --> UI
+```
+
+---
+
+## Installation & Setup
+
+### 1. Desktop Application
+
+1. Download the latest installer `Veloce-DM-Setup-1.0.0.exe` or standalone portable package from the Releases section.
+2. Run the installer or extract the portable folder to your desired location.
+3. Launch Veloce Download Manager. The local receiver service will automatically start on `127.0.0.1:12345`.
+
+### 2. Browser Companion Extension
+
+The extension integrates Chromium browsers with the desktop engine:
+
+1. Download `Veloce-Chrome-Companion-1.0.0.zip` from Releases and extract it to a persistent local folder.
+2. In Google Chrome, navigate to `chrome://extensions/`.
+3. Enable **Developer mode** using the toggle in the upper-right corner.
+4. Click **Load unpacked** and select the extracted extension directory.
+5. The Veloce icon will appear in your browser toolbar, confirming active connection to the desktop client.
+
+### 3. Configuring Interception Rules
+
+By default, the companion extension intercepts downloads matching configured URL prefixes:
+
+1. In the Veloce desktop application, open **Settings**.
+2. Under **Browser Integration**, add domain or URL prefixes (for example, `https://releases.ubuntu.com/` or `https://cdn.example.com/`).
+3. Alternatively, toggle **Catch All Downloads** in the browser extension popup to intercept every file download automatically.
+4. The extension also includes a **Catch Current Download** button to snatch in-progress browser transfers instantly.
+
+---
+
+## Building from Source
+
+### Prerequisites
+
+- Node.js 18.0 or later
+- npm 9.0 or later
+- Windows 10/11 (for NSIS packaging)
+
+### Build Commands
 
 ```bash
+# Clone the repository
+git clone https://github.com/lapisecek/Download-Manager-Pro.git
+cd Download-Manager-Pro
+
 # Install dependencies
 npm install
 
-# Run in development mode
-npm run dev
+# Run automated engine verification tests
+npm run test:engine
 
-# Build the executable
+# Run linter
+npm run lint
+
+# Run in development mode (Vite + Electron)
+npm run electron:dev
+
+# Build production bundle and Windows executable
 npm run build:exe
 ```
+
+---
+
+## Security Model
+
+Veloce enforces defense-in-depth principles:
+
+- **Strict Loopback Binding**: The internal Express receiver binds exclusively to `127.0.0.1`. It never listens on `0.0.0.0`, protecting against unauthorized access from local area networks.
+- **Origin Validation**: Strict CORS headers restrict incoming requests to browser extension IDs and local loopback callers, blocking foreign website exploitation.
+- **Path Traversal Protection**: All inbound filenames undergo sanitization, stripping illegal characters and directory traversal markers (`../`) prior to filesystem writes.
+- **Blob & Data URI Bypassing**: In-browser client-generated exports (`blob:`, `data:`) are intentionally bypassed to prevent data loss.
+
+---
+
+## Specifications
+
+| Specification | Detail |
+| :--- | :--- |
+| **Target OS** | Windows 10 / 11 (x64) |
+| **Extension Standard** | Manifest V3 |
+| **API Loopback Ports** | 12345 (Fallback: 12346, 12347) |
+| **Security Scanning** | SHA-256 Hash Matching via VirusTotal v3 |
+| **Renderer Architecture** | React 19, Lucide Icons, DnD-Kit, Vite 8 |

@@ -1,7 +1,8 @@
 {
-  "name": "customdownloadmanager",
+  "name": "veloce-download-manager",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "High-performance desktop download accelerator and security auditor with native Chromium browser integration.",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -15,8 +16,8 @@
     "build:exe": "npm run build && electron-builder -w"
   },
   "build": {
-    "appId": "com.dmpro.app",
-    "productName": "DM Pro",
+    "appId": "com.veloce.downloadmanager",
+    "productName": "Veloce DM",
     "directories": {
       "output": "release"
     },

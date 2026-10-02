@@ -134,7 +134,7 @@ function Settings() {
             checked={!!settings.autoStart} 
             onChange={(val) => handleChange('autoStart', val)} 
             label="Start with Windows" 
-            subtext="Automatically launch DM Pro minimized on system boot."
+            subtext="Automatically launch Veloce DM minimized on system boot."
           />
           <Toggle 
             checked={!!settings.smartCategorization} 

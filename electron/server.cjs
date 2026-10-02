@@ -106,7 +106,7 @@ function startServer(mainWindow) {
   });
 
   app.get('/api/ping', (req, res) => {
-    res.json({ dmpro: true });
+    res.json({ veloce: true, dmpro: true });
   });
 
   const PORTS = [12345, 12346, 12347];
@@ -120,7 +120,7 @@ function startServer(mainWindow) {
     const currentPort = PORTS[portIndex];
     const server = app.listen(currentPort, '127.0.0.1', () => {
       currentBoundPort = currentPort;
-      sendLog(`[SYSTEM] Starting DM Pro Server...`);
+      sendLog(`[SYSTEM] Starting Veloce Server...`);
       sendLog(`[SYSTEM] Detected local IPv4 addresses: ${boundAddresses.join(', ')}`);
       sendLog(`[SYSTEM] Download receiver server strictly bound to 127.0.0.1:${currentPort}`);
       if (mainWindow && !mainWindow.isDestroyed()) {

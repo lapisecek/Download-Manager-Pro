@@ -41,8 +41,9 @@ setTimeout(async () => {
 
   // Ping server
   const pingRes = await fetch(`http://127.0.0.1:${port}/api/ping`).then(r => r.json());
+  assert.strictEqual(pingRes.veloce, true, '/api/ping should return { veloce: true }');
   assert.strictEqual(pingRes.dmpro, true, '/api/ping should return { dmpro: true }');
-  console.log('✓ server.cjs /api/ping responsive');
+  console.log('✓ server.cjs /api/ping responsive (veloce & dmpro verified)');
 
   // Test CORS rejection of unauthorized external web origin
   const corsReject = await fetch(`http://127.0.0.1:${port}/api/ping`, {
