@@ -17,9 +17,6 @@ console.log('✓ extension/manifest.json schema and MV3 permissions verified');
 
 // 2. Mock Chrome runtime environment for background.js
 let receivedDownloads = [];
-let cancelledDownloads = [];
-let createdNotifications = [];
-let suggestedCalls = [];
 
 const mockServer = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', 'chrome-extension://mock-id');
