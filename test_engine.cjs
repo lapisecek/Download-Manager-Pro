@@ -145,17 +145,28 @@ setTimeout(async () => {
   assert.strictEqual(fs.readFileSync(downloadedPath, 'utf-8'), mockFileContent, 'Content must match source');
   console.log('✓ downloader.cjs handled 302 redirect and prevented path traversal');
 
-  // 4b. Test immediate pause during probe (no zombie download)
+  // 4b. Test immediate pause and cancel during probe (no zombie download)
   await addDownload(`http://127.0.0.1:${mockPort}/redirect`, 'pause-probe-test.txt', {}, mockMainWindow);
   const allDownloads = store.get('downloads') || [];
   const pauseCandidate = allDownloads.find(d => d.filename === 'pause-probe-test.txt');
   assert(pauseCandidate, 'Download should be registered');
   pauseDownload(pauseCandidate.id, mockMainWindow);
   assert.strictEqual(pauseCandidate.status, 'paused', 'Status must be set to paused');
-  await new Promise(r => setTimeout(r, 1000));
-  // Verify it remained paused and did not start downloading
+  await new Promise(r => setTimeout(r, 800));
   assert.strictEqual(pauseCandidate.status, 'paused', 'Download must remain paused without reviving');
   console.log('✓ downloader.cjs handles immediate pause during probing without zombie revival');
+
+  // Test cancelDownload
+  await addDownload(`http://127.0.0.1:${mockPort}/redirect`, 'cancel-probe-test.txt', {}, mockMainWindow);
+  const currentDownloads = store.get('downloads') || [];
+  const cancelCandidate = currentDownloads.find(d => d.filename === 'cancel-probe-test.txt');
+  assert(cancelCandidate, 'Cancel candidate registered');
+  cancelDownload(cancelCandidate.id, mockMainWindow);
+  assert.strictEqual(cancelCandidate.status, 'error', 'Status must be error');
+  assert.strictEqual(cancelCandidate.errorMsg, 'Cancelled by user');
+  await new Promise(r => setTimeout(r, 800));
+  assert.strictEqual(cancelCandidate.status, 'error', 'Cancelled download must remain cancelled');
+  console.log('✓ downloader.cjs handles cancellation cleanly');
 
   // 4c. Test premature EOF detection (does not falsely mark completed)
   await addDownload(`http://127.0.0.1:${mockPort}/incomplete`, 'incomplete-test.txt', {}, mockMainWindow);
