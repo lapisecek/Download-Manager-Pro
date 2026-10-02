@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, clipboard, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, clipboard, dialog, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { startServer, getLogHistory, getActivePort } = require('./server.cjs');
@@ -86,7 +86,8 @@ function createWindow() {
 function createTray() {
   try {
     const iconPath = resolveIconPath();
-    tray = new Tray(iconPath);
+    const icon = nativeImage.createFromPath(iconPath);
+    tray = new Tray(icon.isEmpty() ? iconPath : icon);
     const contextMenu = Menu.buildFromTemplate([
       { label: 'Show Veloce DM', click: () => { if (mainWindow) mainWindow.show(); } },
       { type: 'separator' },
