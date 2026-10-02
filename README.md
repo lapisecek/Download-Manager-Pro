@@ -16,10 +16,6 @@
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License" />
 </p>
 
-<p align="center">
-  <img src="docs/hero.png" width="820" alt="Veloce Download Manager Interface" />
-</p>
-
 ---
 
 ## Overview
@@ -151,10 +147,10 @@ Veloce enforces defense-in-depth principles:
 
 ## Specifications
 
-| Specification | Detail |
-| :--- | :--- |
-| **Target OS** | Windows 10 / 11 (x64) |
-| **Extension Standard** | Manifest V3 |
-| **API Loopback Ports** | 12345 (Fallback: 12346, 12347) |
-| **Security Scanning** | SHA-256 Hash Matching via VirusTotal v3 |
+| Specification             | Detail                                  |
+| :------------------------ | :-------------------------------------- |
+| **Target OS**             | Windows 10 / 11 (x64)                   |
+| **Extension Standard**    | Manifest V3                             |
+| **API Loopback Ports**    | 12345 (Fallback: 12346, 12347)          |
+| **Security Scanning**     | SHA-256 Hash Matching via VirusTotal v3 |
 | **Renderer Architecture** | React 19, Lucide Icons, DnD-Kit, Vite 8 |
